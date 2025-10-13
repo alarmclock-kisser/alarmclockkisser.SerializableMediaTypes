@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>SerializableMediaTypes by alarmclockkisser</Title>
+    <Description>Audio &amp; Image Data classes with collections each for keeping many objects, 
+async + parallel import / export  / data manipulation or extraction (uses NAudio, TagLibSharp and ImageSharp)
+
+Easy-to-use public accessor methods, DI-ready, input validation, try-catch careful operations. It's just the best current DataObjs Library I made up.</Description>
+    <PackageTags>Data; Media; Collection; Import; Export; Image; Audio; Async; Parallel; Thread</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BunLabs.NAudio.Flac" Version="2.0.1" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Lame" Version="2.1.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Resources\Alexander_close_up.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Resources\Squarewave Loop [200].mp3">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
