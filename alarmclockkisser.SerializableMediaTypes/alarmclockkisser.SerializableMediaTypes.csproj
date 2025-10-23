@@ -11,14 +11,18 @@ async + parallel import / export  / data manipulation or extraction (uses NAudio
 
 Easy-to-use public accessor methods, DI-ready, input validation, try-catch careful operations. It's just the best current DataObjs Library I made up.</Description>
     <PackageTags>Data; Media; Collection; Import; Export; Image; Audio; Async; Parallel; Thread</PackageTags>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="BunLabs.NAudio.Flac" Version="2.0.1" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Lame" Version="2.1.0" />
+    <PackageReference Include="SharpAvi" Version="3.0.1" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <PackageReference Include="Xabe.FFmpeg" Version="6.0.2" />
+    <PackageReference Include="Xabe.FFmpeg.Downloader" Version="6.0.2" />
   </ItemGroup>
 
   <ItemGroup>

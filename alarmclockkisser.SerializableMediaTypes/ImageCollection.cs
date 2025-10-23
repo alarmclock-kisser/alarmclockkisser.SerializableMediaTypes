@@ -638,7 +638,7 @@ namespace alarmclockkisser.SerializableMediaTypes
 				Image<Rgba32>[] images,
 				string? outPath = null,
 				string name = "animated_OOCL_",
-				int frameRate = 5,
+				double frameRate = 5.0,
 				bool doLoop = false,
 				int? maxDegreeOfParallelism = null,
 				ResizeMode resizeMode = ResizeMode.Stretch)
@@ -667,8 +667,12 @@ namespace alarmclockkisser.SerializableMediaTypes
 			// Zielgröße an erster Frame orientieren:
 			var targetSize = new SixLabors.ImageSharp.Size(images[0].Width, images[0].Height);
 
-			// GIF-Frame-Delay (in 1/100 Sekunden). Beispiel: 5 FPS => 20 (200ms)
-			int frameDelay = Math.Max(2, (int) Math.Round(100d / frameRate)); // clamp >= 2 (20ms), einige Viewer ignorieren < 2
+			// GIF-Frame-Delay EXACT (not in 10ms, IN 1 MS INT)
+			int frameDelay = (int) Math.Round(1000.0 / frameRate);
+            if (frameDelay <= 0)
+            {
+                frameDelay = 1;
+            }
 
 			// --- Frames parallel vorbereiten (Clone + optional Resize + Delay setzen) ---
 			var prepped = new Image<Rgba32>[images.Length];

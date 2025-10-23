@@ -250,6 +250,18 @@ namespace alarmclockkisser.SerializableMediaTypes
 			this.syncCtx = SynchronizationContext.Current;
 		}
 
+		public static AudioObj? LoadFromFile(string filePath)
+		{
+			return new AudioObj(filePath, null, true);
+		}
+
+		public static async Task<AudioObj?> LoadFromFileAsync(string filePath)
+		{
+			var obj = await CreateAsync(filePath);
+
+			return obj;
+		}
+
 		public void Dispose()
 		{
 			this.player?.Stop();
@@ -262,6 +274,37 @@ namespace alarmclockkisser.SerializableMediaTypes
 			this.player?.Dispose();
 
 			GC.SuppressFinalize(this);
+		}
+
+		public AudioObj Clone()
+		{
+			var clone = new AudioObj(this.Data.ToArray(), this.SampleRate, this.Channels, this.BitDepth)
+			{
+				FilePath = this.FilePath,
+				Form = this.Form,
+				StretchFactor = this.StretchFactor,
+				Bpm = this.Bpm,
+				Timing = this.Timing,
+				ScannedBpm = this.ScannedBpm,
+				ScannedTiming = this.ScannedTiming
+			};
+
+			return clone;
+		}
+
+		public async Task<AudioObj?> CloneAsync()
+		{
+			var clone = new AudioObj(this.Data.ToArray(), this.SampleRate, this.Channels, this.BitDepth)
+			{
+				FilePath = this.FilePath,
+				Form = this.Form,
+				StretchFactor = this.StretchFactor,
+				Bpm = this.Bpm,
+				Timing = this.Timing,
+				ScannedBpm = this.ScannedBpm,
+				ScannedTiming = this.ScannedTiming
+			};
+			return await Task.FromResult(clone);
 		}
 
 		public void LoadAudioFile()
@@ -1668,20 +1711,20 @@ namespace alarmclockkisser.SerializableMediaTypes
 			}
 			samplesPerPixel = Math.Max(1, samplesPerPixel);
 
-			var waveformImg = await this.GetWaveformImageSimpleBase64Async(this.Data, width, height, samplesPerPixel, 1.0f, offsetValue, System.Drawing.Color.BlueViolet, System.Drawing.Color.White, true);
+			var waveformImg = await this.GetWaveformImageSimpleBase64Async(this.Data, width, height, samplesPerPixel, 1.0f, offsetValue, false, System.Drawing.Color.BlueViolet, System.Drawing.Color.White, true);
 
 			return waveformImg;
 		}
 
 		public async Task<string?> GetWaveformImageSimpleBase64Async(float[]? data, int width = 720, int height = 480,
-			int samplesPerPixel = 128, float amplifier = 1.0f, long offset = 0,
-			System.Drawing.Color? graphColor = null, System.Drawing.Color? backgroundColor = null, bool smoothEdges = true)
+	int samplesPerPixel = 128, float amplifier = 1.0f, long offset = 0, bool drawChannelsSeparately = false,
+	System.Drawing.Color? graphColor = null, System.Drawing.Color? backgroundColor = null, bool smoothEdges = true)
 		{
 			int maxWorkers = Environment.ProcessorCount;
 
 			// Normalize dimensions
-			width = Math.Max(100, width);
-			height = Math.Max(100, height);
+			width = Math.Max(1, width);
+			height = Math.Max(1, height);
 			offset = offset == 0 ? this.position * this.Channels : Math.Max(0, offset);
 
 			// Colors
@@ -1708,74 +1751,141 @@ namespace alarmclockkisser.SerializableMediaTypes
 			}
 			maxWorkers = Math.Min(maxWorkers, 16);
 
-			long totalSamples = Math.Min(data.Length - offset, (long)width * samplesPerPixel);
+			long totalSamples = Math.Min(data.Length - offset, (long) width * samplesPerPixel);
 			if (totalSamples <= 0)
 			{
 				return null;
 			}
 
+			// Copy relevant portion
 			float[] samples = new float[totalSamples];
 			Array.Copy(data, offset, samples, 0, totalSamples);
 
-			// Lock the image for pixel access once and operate on spans
+			// If requested draw channels separately and there are multiple channels:
+			bool separate = drawChannelsSeparately && this.Channels > 1;
+
 			await Task.Run(() =>
 			{
 				Rgba32 lineColor = new(graphColor.Value.R, graphColor.Value.G, graphColor.Value.B, graphColor.Value.A);
 				int bytesPerWorker = Math.Max(1, width / maxWorkers);
 
-				// Parallel over horizontal partitions
-				Parallel.For(0, maxWorkers, worker =>
+				if (!separate)
 				{
-					int xStart = worker * bytesPerWorker;
-					int xEnd = worker == maxWorkers - 1 ? width : xStart + bytesPerWorker;
-
-					for (int x = xStart; x < xEnd; x++)
+					// Original behaviour: treat samples as raw floats (possibly interleaved) and draw one waveform
+					Parallel.For(0, maxWorkers, worker =>
 					{
-						int sampleIndex = x * samplesPerPixel;
-						if (sampleIndex >= samples.Length)
-						{
-							break;
-						}
+						int xStart = worker * bytesPerWorker;
+						int xEnd = worker == maxWorkers - 1 ? width : xStart + bytesPerWorker;
 
-						float maxPeak = 0.0f;
-						float minPeak = 0.0f;
-
-						int startSample = sampleIndex;
-						int endSample = Math.Min(startSample + samplesPerPixel, samples.Length);
-						for (int s = startSample; s < endSample; s++)
+						for (int x = xStart; x < xEnd; x++)
 						{
-							float v = samples[s];
-							if (v > maxPeak)
+							int sampleIndex = x * samplesPerPixel;
+							if (sampleIndex >= samples.Length)
 							{
-								maxPeak = v;
+								break;
 							}
 
-							if (v < minPeak)
+							float maxPeak = 0.0f;
+							float minPeak = 0.0f;
+
+							int startSample = sampleIndex;
+							int endSample = Math.Min(startSample + samplesPerPixel, samples.Length);
+							for (int s = startSample; s < endSample; s++)
 							{
-								minPeak = v;
+								float v = samples[s];
+								if (v > maxPeak) maxPeak = v;
+								if (v < minPeak) minPeak = v;
+							}
+
+							int yMax = (int) (((maxPeak * amplifier) + 1.0f) / 2.0f * height);
+							int yMin = (int) (((minPeak * amplifier) + 1.0f) / 2.0f * height);
+							yMax = Math.Clamp(yMax, 0, height - 1);
+							yMin = Math.Clamp(yMin, 0, height - 1);
+							if (yMin > yMax) (yMin, yMax) = (yMax, yMin);
+
+							for (int y = yMin; y <= yMax; y++)
+							{
+								image.ProcessPixelRows(accessor =>
+								{
+									var row = accessor.GetRowSpan(y);
+									row[x] = lineColor;
+								});
 							}
 						}
+					});
+				}
+				else
+				{
+					// Draw each channel in its own vertical band stacked top-to-bottom.
+					int channels = this.Channels;
+					int channelHeight = Math.Max(1, height / channels);
 
-						int yMax = (int)(((maxPeak * amplifier) + 1.0f) / 2.0f * height);
-						int yMin = (int)(((minPeak * amplifier) + 1.0f) / 2.0f * height);
-						yMax = Math.Clamp(yMax, 0, height - 1);
-						yMin = Math.Clamp(yMin, 0, height - 1);
-						if (yMin > yMax)
-						{
-							(yMin, yMax) = (yMax, yMin);
-						}
-
-						for (int y = yMin; y <= yMax; y++)
-						{
-							// Access row span safely
-							image.ProcessPixelRows(accessor =>
-							{
-								var row = accessor.GetRowSpan(y);
-								row[x] = lineColor;
-							});
-						}
+					// total frames available in copied samples (interleaved)
+					int totalFrames = (int) (samples.Length / channels);
+					if (totalFrames <= 0)
+					{
+						return;
 					}
-				});
+
+					// Interpret samplesPerPixel as floats; convert to frames per pixel for multi-channel drawing
+					int framesPerPixel = Math.Max(1, samplesPerPixel / channels);
+
+					Parallel.For(0, maxWorkers, worker =>
+					{
+						int xStart = worker * bytesPerWorker;
+						int xEnd = worker == maxWorkers - 1 ? width : xStart + bytesPerWorker;
+
+						for (int x = xStart; x < xEnd; x++)
+						{
+							int frameIndex = x * framesPerPixel;
+							if (frameIndex >= totalFrames)
+							{
+								break;
+							}
+
+							// For each channel compute min/max within the frame window and draw into its band
+							for (int ch = 0; ch < channels; ch++)
+							{
+								float maxPeak = float.MinValue;
+								float minPeak = float.MaxValue;
+
+								int startFrame = frameIndex;
+								int endFrame = Math.Min(frameIndex + framesPerPixel, totalFrames);
+
+								for (int f = startFrame; f < endFrame; f++)
+								{
+									int idx = f * channels + ch;
+									if (idx >= samples.Length) break;
+									float v = samples[idx];
+									if (v > maxPeak) maxPeak = v;
+									if (v < minPeak) minPeak = v;
+								}
+
+								// If no samples in window fallback to zero
+								if (maxPeak == float.MinValue) maxPeak = 0f;
+								if (minPeak == float.MaxValue) minPeak = 0f;
+
+								int top = ch * channelHeight;
+								int h = channelHeight;
+								// Map peaks into channel band
+								int yMax = top + (int) (((maxPeak * amplifier) + 1.0f) / 2.0f * (h - 1));
+								int yMin = top + (int) (((minPeak * amplifier) + 1.0f) / 2.0f * (h - 1));
+								yMax = Math.Clamp(yMax, top, top + h - 1);
+								yMin = Math.Clamp(yMin, top, top + h - 1);
+								if (yMin > yMax) (yMin, yMax) = (yMax, yMin);
+
+								for (int y = yMin; y <= yMax; y++)
+								{
+									image.ProcessPixelRows(accessor =>
+									{
+										var row = accessor.GetRowSpan(y);
+										row[x] = lineColor;
+									});
+								}
+							}
+						}
+					});
+				}
 
 				// Optionally smooth edges (simple vertical blur pass)
 				if (smoothEdges)

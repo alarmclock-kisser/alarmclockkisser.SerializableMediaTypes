@@ -3,6 +3,8 @@ using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using System;
+using System.Threading.Tasks;
 
 namespace alarmclockkisser.SerializableMediaTypes
 {
@@ -343,13 +345,34 @@ namespace alarmclockkisser.SerializableMediaTypes
 			return $"{this.Width}x{this.Height} px, {this.Channels} ch., {this.Bitdepth} Bits";
 		}
 
-		public static async Task<ImageObj?> FromBytesAsync(byte[] bytes, string name, string contentType)
+		public static async Task<ImageObj?> FromBytesAsync(byte[] bytes, string name, string contentType, int? width = null, int? height = null)
 		{
 			try
 			{
 				var img = await Task.Run(() =>
 				{
-					return SixLabors.ImageSharp.Image.Load<Rgba32>(bytes);
+					// Try to detect an encoded image format first
+					var format = SixLabors.ImageSharp.Image.DetectFormat(bytes);
+					if (format != null)
+					{
+						try
+						{
+							return SixLabors.ImageSharp.Image.Load<Rgba32>(bytes);
+						}
+						catch (SixLabors.ImageSharp.UnknownImageFormatException)
+						{
+							// fall through to raw pixel handling below
+						}
+					}
+
+					// Fallback: treat as raw RGBA pixel data if dimensions are provided and size matches
+					const int bytesPerPixel = 4;
+					if (width.HasValue && height.HasValue && bytes.Length == width.Value * height.Value * bytesPerPixel)
+					{
+						return SixLabors.ImageSharp.Image.LoadPixelData<Rgba32>(bytes, width.Value, height.Value);
+					}
+
+					throw new InvalidOperationException("Unknown image format and missing/invalid width/height for raw pixel data.");
 				});
 
 				return new ImageObj(img, name, false);
